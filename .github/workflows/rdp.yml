@@ -1,0 +1,32 @@
+name: 30-day RDP/VPS Simulation
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */6 * * *'
+jobs:
+  rdp-session:
+    runs-on: windows-latest
+    timeout-minutes: 360
+    steps:
+    - name: Start RDP configuration
+      run: |
+        $pass = 'VillageSecurePass123!'
+        cmd.exe /c "net user Administrator $pass"
+        cmd.exe /c "net localgroup administrators Administrator /add"
+        cmd.exe /c "reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f"
+        cmd.exe /c "netsh advfirewall firewall add rule name='Open Port 3389' dir=in action=allow protocol=TCP localport=3389"
+        echo "RDP enabled. Use public IP and credentials."
+    - name: Keep-alive and tunnel
+      run: |
+        $ip = (Invoke-RestMethod -Uri "https://api.ipify.org").Trim()
+        echo "PUBLIC_IP=$ip" >> $env:GITHUB_ENV
+        # Simulate persistent task
+        for ($i=0; $i -lt 120; $i++) {
+          Start-Sleep -Seconds 180
+          echo "Alive at $(Get-Date)"
+        }
+    - name: Report IP
+      run: |
+        echo "Connect via RDP to: ${{ env.PUBLIC_IP }}"
+        echo "User: Administrator"
+        echo "Pass: VillageSecurePass123!"
