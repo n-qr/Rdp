@@ -1,0 +1,49 @@
+name: RDP Build
+on: [workflow_dispatch]
+
+jobs:
+  rdp-build:
+    runs-on: windows-latest
+    timeout-minutes: 360
+
+    steps:
+    - name: Download and extract Ngrok
+      run: |
+        Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile "ngrok.zip"
+        Expand-Archive ngrok.zip -DestinationPath .
+
+    - name: Authenticate Ngrok
+      run: .\ngrok.exe config add-authtoken YOUR_NGROK_AUTH_TOKEN_HERE
+
+    - name: Enable RDP and set user
+      run: |
+        $password = "VillageSurvival123!"
+        net user Administrator $password
+        reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
+        netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
+
+    - name: Start Ngrok tunnel
+      run: |
+        Start-Process -FilePath ".\ngrok.exe" -ArgumentList "tcp 3389" -NoNewWindow
+        Start-Sleep -Seconds 5
+        (Invoke-WebRequest -Uri http://localhost:4040/api/tunnels -UseBasicParsing).Content | Out-File -FilePath tunnel.json
+        $tunnel = Get-Content tunnel.json | ConvertFrom-Json
+        $public_url = $tunnel.tunnels[0].public_url
+        echo "RDP_CONNECTION=$public_url" | Out-File -FilePath $env:GITHUB_ENV -Append
+        echo "USER=Administrator" | Out-File -FilePath $env:GITHUB_ENV -Append
+        echo "PASS=VillageSurvival123!" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+    - name: Keep alive and output info
+      run: |
+        echo "=========================================="
+        echo "CONNECT USING BELOW DETAILS (Use in your RDP client)"
+        echo "Address: ${{ env.RDP_CONNECTION }}"
+        echo "Username: ${{ env.USER }}"
+        echo "Password: ${{ env.PASS }}"
+        echo "=========================================="
+        echo "This tunnel will last for the job timeout (6 hours)."
+        # Keep-alive loop
+        for ($i = 0; $i -lt 60; $i++) {
+            Write-Host "[$i] Keeping RDP tunnel alive..."
+            Start-Sleep -Seconds 30
+        }
